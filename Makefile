@@ -34,6 +34,6 @@ clean:
 	rm -f pidgin-lunch_tools.so
 
 pidgin-lunch_tools.so:	${SOURCES}
-	${CC} ${LIBPURPLE_CFLAGS} -Wall -pthread ${GLIB_CFLAGS} -I. -g3 -O2 -pipe ${SOURCES} -o pidgin-lunch_tools.so -shared -fPIC -DPIC
+	${CC} ${LIBPURPLE_CFLAGS} -Wall -pthread ${GLIB_CFLAGS} -I. -g3 -O2 -pipe ${SOURCES} -o pidgin-lunch_tools.so -shared -fPIC -DPIC -std=c99
 
 release:	pidgin-lunch_tools.so
