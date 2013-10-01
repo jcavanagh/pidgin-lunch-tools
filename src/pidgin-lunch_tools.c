@@ -32,7 +32,7 @@
 static PurpleCmdId lunch_coup_command_id;
 
 //Utils
-void gen_random_str(char *dest, size_t length) {
+static void gen_random_str(char *dest, size_t length) {
     char charset[] = "0123456789"
                      "abcdefghijklmnopqrstuvwxyz"
                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -44,8 +44,15 @@ void gen_random_str(char *dest, size_t length) {
     *dest = '\0';
 }
 
-char *get_bot_cmd(char *cmd) {
-    //Append prefix and bot name
+static void send_msg(PurpleConversation *conv, char *msg) {
+    //TODO: IM support?
+    PurpleConvChat *conv_chat = purple_conversation_get_chat_data(conv);
+
+    purple_conv_chat_send_with_flags(conv_chat, msg, PURPLE_MESSAGE_SEND);
+}
+
+static void send_bot_cmd(PurpleConversation *conv, char *cmd) {
+    //Get prefix and bot name
     const char *bot_name = purple_prefs_get_string(PREF_BOT_NAME);
     const char *bot_cmd_prefix = purple_prefs_get_string(PREF_BOT_CMD_PREFIX);
 
@@ -56,7 +63,9 @@ char *get_bot_cmd(char *cmd) {
     strcat(bot_cmd, " ");
     strcat(bot_cmd, cmd);
 
-    return bot_cmd;
+    send_msg(conv, bot_cmd);
+
+    free(bot_cmd);
 }
 
 static void do_command(PurpleConversation *conv, char *cmd) {
@@ -82,13 +91,6 @@ static void change_nick(PurpleConversation *conv, char *new_nick) {
     free(final_nick_cmd);
 }
 
-static void send_msg(PurpleConversation *conv, char *msg) {
-    //TODO: IM support?
-    PurpleConvChat *conv_chat = purple_conversation_get_chat_data(conv);
-
-    purple_conv_chat_send_with_flags(conv_chat, msg, PURPLE_MESSAGE_SEND);
-}
-
 //Lunch coup things
 static char lunch_coup_original_nick[64];
 static gboolean lunch_coup_active = FALSE;
@@ -96,12 +98,8 @@ static gboolean lunch_coup_active = FALSE;
 static void lunch_coup_send_start_cmd(PurpleConversation *conv) {
     //Pull prefs, create command
     const char *start_cmd = purple_prefs_get_string(PREF_LUNCH_COUP_START_CMD);
-    char *coup_start_cmd = get_bot_cmd(start_cmd);
 
-    //Send message
-    send_msg(conv, coup_start_cmd);
-
-    free(coup_start_cmd);
+    send_bot_cmd(conv, start_cmd);
 }
 
 static void lunch_coup_activate(PurpleConversation *conv) {
@@ -144,40 +142,31 @@ static gboolean lunch_coup_receiving_msg_cb(PurpleAccount *account, char **sende
     const char *coup_complete_regex = purple_prefs_get_string(PREF_LUNCH_COUP_COMPLETE_REGEX);
     const char *no_king_regex = purple_prefs_get_string(PREF_LUNCH_COUP_NO_KING_REGEX);
 
-    //Get conversation type and chat data
-    //TODO: Support for IM?  Probably don't need it.
-    PurpleConversationType conv_type = purple_conversation_get_type(conv);
-    
-    // TODO: IM support?
-    if(conv_type == PURPLE_CONV_TYPE_CHAT) {
-        if(lunch_coup_active) {
-            if(strcmp(*sender, bot_name) == 0) {
-                //Check to see what it sent
-                if(g_regex_match_simple(coup_complete_regex, *message, G_REGEX_CASELESS, 0)) {
-                    //Coup complete!  Return to original nick and end coup
-                    change_nick(conv, lunch_coup_original_nick);
-                    lunch_coup_deactivate(conv);
-                } else if(g_regex_match_simple(no_king_regex, *message, G_REGEX_CASELESS, 0)) {
-                    //No king - no lunch coup necessary
-                    lunch_coup_deactivate(conv);
-                } else if(g_regex_match_simple(votes_left_regex, *message, G_REGEX_CASELESS, 0)) {
-                    //More votes are required, change nick and go to town
-                    char new_nick[9];
-                    gen_random_str(new_nick, 8);
+    if(lunch_coup_active) {
+        if(strcmp(*sender, bot_name) == 0) {
+            //Check to see what it sent
+            if(g_regex_match_simple(coup_complete_regex, *message, G_REGEX_CASELESS, 0)) {
+                //Coup complete!  Return to original nick and end coup
+                change_nick(conv, lunch_coup_original_nick);
+                lunch_coup_deactivate(conv);
+            } else if(g_regex_match_simple(no_king_regex, *message, G_REGEX_CASELESS, 0)) {
+                //No king - no lunch coup necessary
+                lunch_coup_deactivate(conv);
+            } else if(g_regex_match_simple(votes_left_regex, *message, G_REGEX_CASELESS, 0)) {
+                //More votes are required, change nick and go to town
+                char new_nick[9];
+                gen_random_str(new_nick, 8);
 
-                    change_nick(conv, new_nick);
-                    lunch_coup_send_start_cmd(conv);
-                } else {
-                    purple_debug_misc(PLUGIN_ID, "Ignoring bot message - no match: %s\n", *message);
-                }
+                change_nick(conv, new_nick);
+                lunch_coup_send_start_cmd(conv);
             } else {
-                purple_debug_misc(PLUGIN_ID, "Ignoring message - not from configured bot: %s\n", *sender);
+                purple_debug_misc(PLUGIN_ID, "Ignoring bot message - no match: %s\n", *message);
             }
         } else {
-            purple_debug_misc(PLUGIN_ID, "Ignoring message - lunch coup not active\n");
+            purple_debug_misc(PLUGIN_ID, "Ignoring message - not from configured bot: %s\n", *sender);
         }
     } else {
-        purple_debug_misc(PLUGIN_ID, "Ignoring message - not in chat\n");
+        purple_debug_misc(PLUGIN_ID, "Ignoring message - lunch coup not active\n");
     }
 
     return FALSE;
