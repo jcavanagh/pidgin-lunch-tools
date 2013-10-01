@@ -15,6 +15,9 @@
 #define PREF_LUNCH_COUP_COMPLETE_REGEX   PREF_LUNCH_COUP "/complete_regex"
 #define PREF_LUNCH_COUP_NO_KING_REGEX    PREF_LUNCH_COUP "/no_king_regex"
 
+#define PREF_LUNCH_KING                  PREF_PREFIX "/lunch_king"
+#define PREF_LUNCH_KING_CMD              PREF_LUNCH_KING "/cmd"
+
 #define PREF_CHANNEL                     PREF_PREFIX "/channel"
 
 #include <glib.h>
@@ -220,6 +223,43 @@ static void init_lunch_coup(PurplePlugin *plugin) {
     );
 }
 
+//Lunch king things
+static PurpleCmdRet lunch_king_cb(PurpleConversation *conv, const gchar *cmd, gchar **args, gchar **error, void *data) {
+    //Get prefs
+    const char *king_cmd = purple_prefs_get_string(PREF_LUNCH_KING_CMD);
+
+    //ALL HAIL THE KING
+    send_bot_cmd(conv, king_cmd);
+
+    return PURPLE_CMD_RET_OK;
+}
+
+static void init_lunch_king(PurplePlugin *plugin) {
+    // /lunchking
+    lunch_coup_command_id = purple_cmd_register(
+        "lunchking",
+        "",
+        PURPLE_CMD_P_DEFAULT,
+        PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT,
+        PLUGIN_ID,
+        lunch_king_cb,
+        "",
+        NULL
+    );
+
+    // /lk
+    lunch_coup_command_id = purple_cmd_register(
+        "lk",
+        "",
+        PURPLE_CMD_P_DEFAULT,
+        PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT,
+        PLUGIN_ID,
+        lunch_king_cb,
+        "Initiates and executes a lunch coup",
+        NULL
+    );
+}
+
 //Configuration things
 static PurplePluginPrefFrame *get_plugin_pref_frame(PurplePlugin *plugin) {
     PurplePluginPrefFrame *frame;
@@ -271,6 +311,16 @@ static PurplePluginPrefFrame *get_plugin_pref_frame(PurplePlugin *plugin) {
     );
     purple_plugin_pref_frame_add(frame, pref);
 
+    //Lunch king config
+    pref = purple_plugin_pref_new_with_label("Lunch King");
+    purple_plugin_pref_frame_add(frame, pref);
+
+    pref = purple_plugin_pref_new_with_name_and_label(
+        PREF_LUNCH_KING_CMD,
+        "Command"
+    );
+    purple_plugin_pref_frame_add(frame, pref);
+
     //Channel
     pref = purple_plugin_pref_new_with_label("Channel");
     purple_plugin_pref_frame_add(frame, pref);
@@ -284,6 +334,7 @@ static void create_prefs() {
 
     purple_prefs_add_none(PREF_BOT);
     purple_prefs_add_none(PREF_LUNCH_COUP);
+    purple_prefs_add_none(PREF_LUNCH_KING);
     purple_prefs_add_none(PREF_CHANNEL);
 
     //Bot prefs
@@ -295,6 +346,9 @@ static void create_prefs() {
     purple_prefs_add_string(PREF_LUNCH_COUP_VOTES_LEFT_REGEX, "^.*(\\d+).*more.*vote.*$");
     purple_prefs_add_string(PREF_LUNCH_COUP_COMPLETE_REGEX, "^Down with.+$");
     purple_prefs_add_string(PREF_LUNCH_COUP_NO_KING_REGEX, "^.+no.+king.*$");
+
+    //Lunch king prefs
+    purple_prefs_add_string(PREF_LUNCH_KING_CMD, "lunch king");
 
     //Channel prefs
 }
@@ -314,8 +368,10 @@ static gboolean plugin_load(PurplePlugin *plugin) {
 
     //Load the rest of the plugin
     init_lunch_coup(plugin);
+    init_lunch_king(plugin);
 
     //Attach to chat events
+    //TODO: IM support?
     purple_signal_connect(
         purple_conversations_get_handle(), 
         "receiving-chat-msg",
