@@ -44,6 +44,21 @@ void gen_random_str(char *dest, size_t length) {
     *dest = '\0';
 }
 
+char *get_bot_cmd(char *cmd) {
+    //Append prefix and bot name
+    const char *bot_name = purple_prefs_get_string(PREF_BOT_NAME);
+    const char *bot_cmd_prefix = purple_prefs_get_string(PREF_BOT_CMD_PREFIX);
+
+    //Build command
+    char *bot_cmd = (char *) malloc(sizeof(bot_cmd_prefix) + sizeof(bot_name) + sizeof(cmd) + 1);
+    strcpy(bot_cmd, bot_cmd_prefix);
+    strcat(bot_cmd, bot_name);
+    strcat(bot_cmd, " ");
+    strcat(bot_cmd, cmd);
+
+    return bot_cmd;
+}
+
 //Lunch coup things
 static char lunch_coup_original_nick[64];
 static gboolean lunch_coup_active = FALSE;
@@ -54,15 +69,9 @@ static void lunch_coup_send_start_cmd(PurpleConversation *conv) {
 
     //Pull all the prefs we need
     const char *start_cmd = purple_prefs_get_string(PREF_LUNCH_COUP_START_CMD);
-    const char *bot_name = purple_prefs_get_string(PREF_BOT_NAME);
-    const char *bot_cmd_prefix = purple_prefs_get_string(PREF_BOT_CMD_PREFIX);
 
     //Create start command
-    char *coup_start_cmd = (char *) malloc(64 * sizeof(char));
-    strcpy(coup_start_cmd, bot_cmd_prefix);
-    strcat(coup_start_cmd, bot_name);
-    strcat(coup_start_cmd, " ");
-    strcat(coup_start_cmd, start_cmd);
+    char *coup_start_cmd = get_bot_cmd(start_cmd);
 
     purple_conv_chat_send_with_flags(conv_chat, coup_start_cmd, PURPLE_MESSAGE_SEND);
 
