@@ -102,7 +102,7 @@ static void lunch_coup_send_start_cmd(PurpleConversation *conv) {
     //Pull prefs, create command
     const char *start_cmd = purple_prefs_get_string(PREF_LUNCH_COUP_START_CMD);
 
-    send_bot_cmd(conv, start_cmd);
+    send_bot_cmd(conv, (char *)start_cmd);
 }
 
 static void lunch_coup_activate(PurpleConversation *conv) {
@@ -229,7 +229,7 @@ static PurpleCmdRet lunch_king_cb(PurpleConversation *conv, const gchar *cmd, gc
     const char *king_cmd = purple_prefs_get_string(PREF_LUNCH_KING_CMD);
 
     //ALL HAIL THE KING
-    send_bot_cmd(conv, king_cmd);
+    send_bot_cmd(conv, (char *)king_cmd);
 
     return PURPLE_CMD_RET_OK;
 }
