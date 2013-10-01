@@ -150,12 +150,10 @@ static gboolean lunch_coup_receiving_msg_cb(PurpleAccount *account, char **sende
                     change_nick(conv, new_nick);
                     lunch_coup_send_start_cmd(conv);
                 } else {
-                    purple_debug_misc(PLUGIN_ID, "Ignoring bot message - no match: \n");
-                    purple_debug_misc(PLUGIN_ID, "%s", *sender);
-                    purple_debug_misc(PLUGIN_ID, "\n");
+                    purple_debug_misc(PLUGIN_ID, "Ignoring bot message - no match: %s\n", *message);
                 }
             } else {
-                purple_debug_misc(PLUGIN_ID, "Ignoring message - not from configured bot\n");
+                purple_debug_misc(PLUGIN_ID, "Ignoring message - not from configured bot: %s\n", *sender);
             }
         } else {
             purple_debug_misc(PLUGIN_ID, "Ignoring message - lunch coup not active\n");
