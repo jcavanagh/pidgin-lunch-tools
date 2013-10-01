@@ -13,9 +13,9 @@
 #define PREF_LUNCH_COUP_START_CMD        PREF_LUNCH_COUP "/start_cmd"
 #define PREF_LUNCH_COUP_VOTES_LEFT_REGEX PREF_LUNCH_COUP "/votes_left_regex"
 #define PREF_LUNCH_COUP_COMPLETE_REGEX   PREF_LUNCH_COUP "/complete_regex"
+#define PREF_LUNCH_COUP_NO_KING_REGEX    PREF_LUNCH_COUP "/no_king_regex"
 
 #define PREF_CHANNEL                     PREF_PREFIX "/channel"
-#define PREF_CHANNEL_NICK_CMD            PREF_CHANNEL "/nick_cmd"
 
 #include <glib.h>
 #include <string.h>
@@ -32,34 +32,92 @@
 static PurpleCmdId lunch_coup_command_id;
 
 //Utils
-void gen_random_str(char *s, const int len) {
-    static const char alphanum[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
+void gen_random_str(char *dest, size_t length) {
+    char charset[] = "0123456789"
+                     "abcdefghijklmnopqrstuvwxyz"
+                     "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-    for (int i = 0; i < len; ++i) {
-        s[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+    while (length-- > 0) {
+        size_t index = (double) rand() / RAND_MAX * (sizeof charset - 1);
+        *dest++ = charset[index];
     }
-
-    s[len] = 0;
+    *dest = '\0';
 }
 
 //Lunch coup things
-static char *lunch_coup_original_nick = NULL;
+static char lunch_coup_original_nick[64];
 static gboolean lunch_coup_active = FALSE;
 
-static void change_nick(PurpleConvChat *conv_chat, char *new_nick) {
-    const char *nick_cmd = purple_prefs_get_string(PREF_CHANNEL_NICK_CMD);
-    char *final_nick_cmd = (char*) malloc(32 * sizeof(char));
+static void lunch_coup_send_start_cmd(PurpleConversation *conv) {
+    //TODO: IM support?
+    PurpleConvChat *conv_chat = purple_conversation_get_chat_data(conv);
 
-    strcat(final_nick_cmd, nick_cmd);
-    strcat(final_nick_cmd, " ");
+    //Pull all the prefs we need
+    const char *start_cmd = purple_prefs_get_string(PREF_LUNCH_COUP_START_CMD);
+    const char *bot_name = purple_prefs_get_string(PREF_BOT_NAME);
+    const char *bot_cmd_prefix = purple_prefs_get_string(PREF_BOT_CMD_PREFIX);
+
+    //Create start command
+    char *coup_start_cmd = (char *) malloc(64 * sizeof(char));
+    strcpy(coup_start_cmd, bot_cmd_prefix);
+    strcat(coup_start_cmd, bot_name);
+    strcat(coup_start_cmd, " ");
+    strcat(coup_start_cmd, start_cmd);
+
+    purple_conv_chat_send_with_flags(conv_chat, coup_start_cmd, PURPLE_MESSAGE_SEND);
+
+    free(coup_start_cmd);
+}
+
+static void activate_lunch_coup(PurpleConversation *conv) {
+    //TODO: IM support?
+    PurpleConvChat *conv_chat = purple_conversation_get_chat_data(conv);
+
+    //Activate lunch coup
+    strcpy(lunch_coup_original_nick, purple_conv_chat_get_nick(conv_chat));
+    lunch_coup_active = TRUE;
+
+    //Send message
+    lunch_coup_send_start_cmd(conv);
+
+    purple_conversation_write(
+        conv,
+        PLUGIN_ID,
+        "Lunch coup initiated!",
+        PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG,
+        time(NULL)
+    );
+}
+
+static void deactivate_lunch_coup(PurpleConversation *conv) {
+    //Deactivate lunch coup
+    lunch_coup_active = FALSE;
+
+    purple_conversation_write(
+        conv,
+        PLUGIN_ID,
+        "Lunch coup complete!",
+        PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG,
+        time(NULL)
+    );
+}
+
+static void change_nick(PurpleConversation *conv, char *new_nick) {
+    char *final_nick_cmd = (char *) malloc(64 * sizeof(char));
+    strcpy(final_nick_cmd, "nick ");
     strcat(final_nick_cmd, new_nick);
 
-    purple_conv_chat_send(conv_chat, nick_cmd);
+    char *error = (char *) malloc(1024 * sizeof(char));
+
+    purple_cmd_do_command(
+        conv,
+        final_nick_cmd,
+        final_nick_cmd,
+        &error
+    );
 
     free(final_nick_cmd);
+    free(error);
 }
 
 static gboolean lunch_coup_receiving_msg_cb(PurpleAccount *account, char **sender, char **message, PurpleConversation *conv, PurpleMessageFlags *flags) {
@@ -67,31 +125,33 @@ static gboolean lunch_coup_receiving_msg_cb(PurpleAccount *account, char **sende
     const char *bot_name = purple_prefs_get_string(PREF_BOT_NAME);
     const char *votes_left_regex = purple_prefs_get_string(PREF_LUNCH_COUP_VOTES_LEFT_REGEX);
     const char *coup_complete_regex = purple_prefs_get_string(PREF_LUNCH_COUP_COMPLETE_REGEX);
+    const char *no_king_regex = purple_prefs_get_string(PREF_LUNCH_COUP_NO_KING_REGEX);
 
     //Get conversation type and chat data
     //TODO: Support for IM?  Probably don't need it.
     PurpleConversationType conv_type = purple_conversation_get_type(conv);
-    PurpleConvChat *conv_chat = purple_conversation_get_chat_data(conv);
     
     if(conv_type == PURPLE_CONV_TYPE_CHAT) {
         if(lunch_coup_active) {
-            if(*sender == bot_name) {
+            if(strcmp(*sender, bot_name) == 0) {
                 //Check to see what it sent
                 if(g_regex_match_simple(coup_complete_regex, *message, G_REGEX_CASELESS, 0)) {
                     //Coup complete!  Return to original nick and end coup
-                    change_nick(conv_chat, lunch_coup_original_nick);
-                    lunch_coup_active = FALSE;
+                    change_nick(conv, lunch_coup_original_nick);
+                    deactivate_lunch_coup(conv);
+                } else if(g_regex_match_simple(no_king_regex, *message, G_REGEX_CASELESS, 0)) {
+                    //No king - no lunch coup necessary
+                    deactivate_lunch_coup(conv);
                 } else if(g_regex_match_simple(votes_left_regex, *message, G_REGEX_CASELESS, 0)) {
                     //More votes are required, change nick and go to town
-                    char *new_nick = (char*) malloc(16 * sizeof(char));
+                    char new_nick[9];
                     gen_random_str(new_nick, 8);
-        
-                    change_nick(conv_chat, new_nick);
 
-                    free(new_nick);
+                    change_nick(conv, new_nick);
+                    lunch_coup_send_start_cmd(conv);
                 } else {
-                    purple_debug_misc(PLUGIN_ID, "Ignoring bot message - no match: ");
-                    purple_debug_misc(PLUGIN_ID, *sender);
+                    purple_debug_misc(PLUGIN_ID, "Ignoring bot message - no match: \n");
+                    purple_debug_misc(PLUGIN_ID, "%s", *sender);
                     purple_debug_misc(PLUGIN_ID, "\n");
                 }
             } else {
@@ -104,24 +164,18 @@ static gboolean lunch_coup_receiving_msg_cb(PurpleAccount *account, char **sende
         purple_debug_misc(PLUGIN_ID, "Ignoring message - not in chat\n");
     }
 
-    return TRUE;
+    return FALSE;
 }
 
 static PurpleCmdRet lunch_coup_cb(PurpleConversation *conv, const gchar *cmd, gchar **args, gchar **error, void *data) {
-    //Pull all the prefs we need
-    const char *start_cmd = purple_prefs_get_string(PREF_LUNCH_COUP_START_CMD);
-
     //Get conversation type and chat data
     //TODO: Support for IM?  Probably don't need it.
     PurpleConversationType conv_type = purple_conversation_get_type(conv);
-    PurpleConvChat *conv_chat = purple_conversation_get_chat_data(conv);
     
     //DOWN WITH THE KING
     if(conv_type == PURPLE_CONV_TYPE_CHAT) {
         //Start the coup
-        lunch_coup_original_nick = (char *)purple_conv_chat_get_nick(conv_chat);
-        lunch_coup_active = TRUE;
-        purple_conv_chat_send(conv_chat, start_cmd);
+        activate_lunch_coup(conv);
     } else {
         purple_conversation_write(
             conv,
@@ -139,6 +193,18 @@ static void init_lunch_coup(PurplePlugin *plugin) {
     // /lunchcoup
     lunch_coup_command_id = purple_cmd_register( 
         "lunchcoup",
+        "",
+        PURPLE_CMD_P_DEFAULT,
+        PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT,
+        PLUGIN_ID,
+        lunch_coup_cb,
+        "Initiates and executes a lunch coup",
+        NULL
+    );
+
+    // /lc
+    lunch_coup_command_id = purple_cmd_register( 
+        "lc",
         "",
         PURPLE_CMD_P_DEFAULT,
         PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT,
@@ -194,14 +260,14 @@ static PurplePluginPrefFrame *get_plugin_pref_frame(PurplePlugin *plugin) {
     );
     purple_plugin_pref_frame_add(frame, pref);
 
-    //Channel
-    pref = purple_plugin_pref_new_with_label("Channel");
+    pref = purple_plugin_pref_new_with_name_and_label(
+        PREF_LUNCH_COUP_NO_KING_REGEX,
+        "No King Regex"
+    );
     purple_plugin_pref_frame_add(frame, pref);
 
-    pref = purple_plugin_pref_new_with_name_and_label(
-        PREF_CHANNEL_NICK_CMD,
-        "Nick Change Command"
-    );
+    //Channel
+    pref = purple_plugin_pref_new_with_label("Channel");
     purple_plugin_pref_frame_add(frame, pref);
 
     return frame;
@@ -221,11 +287,11 @@ static void create_prefs() {
 
     //Lunch coup prefs
     purple_prefs_add_string(PREF_LUNCH_COUP_START_CMD, "lunch coup");
-    purple_prefs_add_string(PREF_LUNCH_COUP_VOTES_LEFT_REGEX, "^(\\d+).+votes.+$");
+    purple_prefs_add_string(PREF_LUNCH_COUP_VOTES_LEFT_REGEX, "^.*(\\d+).*more.*vote.*$");
     purple_prefs_add_string(PREF_LUNCH_COUP_COMPLETE_REGEX, "^Down with.+$");
+    purple_prefs_add_string(PREF_LUNCH_COUP_NO_KING_REGEX, "^.+no.+king.*$");
 
     //Channel prefs
-    purple_prefs_add_string(PREF_CHANNEL_NICK_CMD, "/nick");
 }
 
 //Chat handlers
@@ -233,7 +299,7 @@ static gboolean receiving_msg_cb(PurpleAccount *account, char **sender, char **m
     //Delegate to lunch coup handler
     lunch_coup_receiving_msg_cb(account, sender, message, conv, flags);
 
-    return TRUE;
+    return FALSE;
 }
 
 //Plugin things
