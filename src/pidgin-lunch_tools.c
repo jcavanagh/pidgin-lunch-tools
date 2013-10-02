@@ -35,11 +35,18 @@
 static PurpleCmdId lunch_coup_command_id;
 
 //Utils
-static void gen_random_str(char *dest, size_t length) {
+static void gen_random_nick(char *dest, size_t length) {
+    char first_charset[] = "abcdefghijklmnopqrstuvwxyz";
     char charset[] = "0123456789"
                      "abcdefghijklmnopqrstuvwxyz"
                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
+    //Make sure the first is a letter
+    size_t first_index = (double) rand() / RAND_MAX * (sizeof first_charset - 1);
+    *dest++ = first_charset[first_index];
+    length--;
+
+    //Fill rest of string
     while (length-- > 0) {
         size_t index = (double) rand() / RAND_MAX * (sizeof charset - 1);
         *dest++ = charset[index];
@@ -88,6 +95,8 @@ static void change_nick(PurpleConversation *conv, char *new_nick) {
     char *final_nick_cmd = (char *) malloc(64 * sizeof(char));
     strcpy(final_nick_cmd, "nick ");
     strcat(final_nick_cmd, new_nick);
+
+    purple_debug_misc(PLUGIN_ID, "Changing nick to: %s\n", new_nick);
 
     do_command(conv, final_nick_cmd);
 
@@ -158,7 +167,7 @@ static gboolean lunch_coup_receiving_msg_cb(PurpleAccount *account, char **sende
             } else if(g_regex_match_simple(votes_left_regex, *message, G_REGEX_CASELESS, 0)) {
                 //More votes are required, change nick and go to town
                 char new_nick[9];
-                gen_random_str(new_nick, 8);
+                gen_random_nick(new_nick, 8);
 
                 change_nick(conv, new_nick);
                 lunch_coup_send_start_cmd(conv);
